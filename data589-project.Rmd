@@ -1,0 +1,299 @@
+---
+title: "Data589-Project"
+author: "Siyue Gao"
+date: "2023-04-18"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE
+                      #,warning=FALSE
+                      )
+```
+
+```{r}
+library(sf)
+library(sp)
+library(spatstat)
+library(maptools)
+library(rgdal)
+library(viridis)
+```
+
+```{r}
+load('C:/Users/siyue/Documents/Block 6/data589/BC_Covariates.RDa')
+load('C:/Users/siyue/Documents/Block 6/data589/species_bc.RData')
+```
+
+```{r}
+coord <- df[,c('decimalLatitude','decimalLongitude')]
+coord <- na.omit(coord)
+```
+
+```{r}
+#Convert the coordinate
+coordinates(coord) <- ~ decimalLongitude+decimalLatitude
+proj4string(coord) <- CRS("+proj=longlat +datum=WGS84")
+coord_conv <- spTransform(coord, CRS("+proj=aea +lat_0=45 +lon_0=-126 +lat_1=50 +lat_2=58.5 +x_0=1000000 +y_0=0 +datum=NAD83 +units=m +no_defs"))
+coord_conv
+```
+
+```{r}
+#plot ppp
+vulpe_ppp <- ppp(x=coord_conv$decimalLatitude,y=coord_conv$decimalLongitude,window=as.owin(DATA$Window))
+attr(vulpe_ppp, "rejects")
+vulpe_ppp <- as.ppp(vulpe_ppp)
+plot(vulpe_ppp,main='Point Pattern of vulpes in BC ',col='darkgrey',cols='darkblue',pch=16,cex=0.9)
+```
+```{r}
+#plot elevation image
+fig <- persp(DATA$Elevation, # source data
+             theta = 25, phi = 20, # rotation
+             expand = 30, # z-axis expansion
+             shade = 0.1, # shading
+             box = FALSE, # axes on/off
+             main = "Elevation Perspective Plot", # title
+             colmap = viridis(200) ) # colour pallet
+
+perspPoints(vulpe_ppp, Z = DATA$Elevation, M = fig, pch = 16, cex = 0.7)
+```
+Try to see if there are some relationship.
+```{r}
+plot(DATA$Forest)
+plot(vulpe_ppp,add=T,pch=16,cex=0.8)
+```
+
+```{r}
+plot(DATA$Elevation)
+plot(vulpe_ppp,add=T,pch=16,cex=0.8)
+```
+
+```{r}
+plot(DATA$HFI)
+plot(vulpe_ppp,add=T,pch=16,cex=0.8)
+```
+
+```{r}
+plot(DATA$Dist_Water)
+plot(vulpe_ppp,add=T,pch=16,cex=0.8)
+```
+
+```{r}
+#the intensity of vulpes/km 2 in BC
+win_km <- rescale(as.owin(DATA$Window), 1000, "km")
+vulpe_ppp$n/area(win_km)
+```
+
+```{r}
+#Use a quadrat test to determine whether the assumption of homogeneity is met.
+Q <- quadratcount(vulpe_ppp,
+nx = 10,
+ny = 10)
+quadrat.test(Q)
+```
+```{r}
+#Visualise both the quadrats and estimated intensity
+plot(vulpe_ppp,cols = "#046C9A",pch=16)
+plot(Q, cex = 1.2, col = "red", add = T)
+
+```
+
+```{r}
+plot(intensity(Q, image = T))
+plot(vulpe_ppp,add=T,cols='black',pch=16,cex=0.8)
+```
+$\rho$
+```{r}
+#Estimate $\rho$ for the locations of vulpes as a function of elevation
+rho_e <- rhohat(vulpe_ppp, DATA$Elevation)
+# Plot $\rho$ vs. elevation
+plot(rho_e,xlim=c(0,3500))
+
+```
+```{r}
+#Estimate $\rho$ for the locations of vulpes as a function of forest
+rho_f <- rhohat(vulpe_ppp, DATA$Forest)
+# Plot $\rho$ vs. forest
+plot(rho_f)
+```
+
+```{r}
+#Estimate $\rho$ for the locations of vulpes as a function of HFI
+rho_h <- rhohat(vulpe_ppp, DATA$HFI)
+# Plot $\rho$ vs. HFI
+plot(rho_h)
+```
+
+```{r}
+#Estimate $\rho$ for the locations of vulpes as a function of Dist_Water
+rho_w <- rhohat(vulpe_ppp, DATA$Dist_Water)
+# Plot $\rho$ vs. Dist_Water
+plot(rho_w)
+```
+
+
+
+```{r}
+#Using Ripley’s K-function, test for a significant (i.e., $\alpha$ = 0.05) correlation between vulpe locations.
+#corrected for inhomogeneity
+lambda_vulpe_pos <- density(vulpe_ppp,
+sigma=bw.ppl,
+positive=TRUE)
+
+E_vulpe_inhom <- envelope(vulpe_ppp,
+Kinhom,
+simulate = expression(rpoispp(lambda_vulpe_pos)),
+correction="border",
+rank = 1,
+nsim = 19,
+fix.n = TRUE)
+
+plot(E_vulpe_inhom,main = "",lwd = 2)
+```
+```{r}
+pcf_vulpe_inhom <- envelope(vulpe_ppp,
+pcfinhom,
+simulate = expression(rpoispp(lambda_vulpe_pos)),
+rank = 1,
+nsim = 19)
+plot(pcf_vulpe_inhom)
+
+```
+
+no clustering
+
+collinearity
+```{r}
+cor.im(DATA$Elevation,DATA$Forest, use = "complete.obs");
+cor.im(DATA$Elevation,DATA$Dist_Water, use = "complete.obs");
+cor.im(DATA$Forest,DATA$HFI, use = "complete.obs");
+cor.im(DATA$Elevation,DATA$HFI, use = "complete.obs");
+cor.im(DATA$Forest,DATA$Dist_Water, use = "complete.obs");
+cor.im(DATA$HFI,DATA$Dist_Water, use = "complete.obs")
+```
+The predictors are on very different scales
+```{r}
+mu <- mean(DATA$Elevation)
+stdev <- sd(DATA$Elevation)
+DATA$Elevation <- eval.im((Elevation - mu)/stdev, DATA)
+mu <- mean(DATA$Dist_Water)
+stdev <- sd(DATA$Dist_Water)
+DATA$Dist_Water <- eval.im((Dist_Water - mu)/stdev, DATA)
+mu <- mean(DATA$Forest)
+stdev <- sd(DATA$Forest)
+DATA$Forest <- eval.im((Forest - mu)/stdev, DATA)
+mu <- mean(DATA$HFI)
+stdev <- sd(DATA$HFI)
+DATA$HFI <- eval.im((HFI - mu)/stdev, DATA)
+```
+
+Since the relationship in rho are not apparently quadratic but polynomial
+
+```{r}
+fit_all <- ppm(vulpe_ppp~polynom(Elevation,3)+polynom(Forest,3)+HFI +I(HFI^2)+I(HFI^3)+polynom(Dist_Water,3),data=DATA)
+fit_all
+```
+
+```{r}
+fit_sel <- ppm(vulpe_ppp~+polynom(Forest,3)+HFI+I(HFI^2)+polynom(Dist_Water,3),data=DATA)
+fit_sel
+```
+```{r}
+fit_null <- ppm(vulpe_ppp~1,data=DATA)
+fit_null
+```
+```{r}
+fit_qua <- ppm(vulpe_ppp~+polynom(Elevation,2)+polynom(Forest,2)+HFI+I(HFI^2)+polynom(Dist_Water,2),data=DATA)
+fit_qua
+```
+
+```{r}
+AIC(fit_all);
+AIC(fit_sel);
+AIC(fit_qua);
+AIC(fit_null)
+```
+```{r}
+anova(fit_all, fit_sel, test = "LRT")
+
+```
+```{r}
+quadrat.test(fit_all, nx = 10, ny = 10)
+
+```
+```{r}
+#Calculate the residuals
+res <- residuals.ppm(fit_all)
+#Visualise the residuals
+diagnose.ppm(fit_all)
+```
+```{r}
+#Calculate the partial residuals as a function of elevation
+par_res_elev <- parres(fit_all, "Elevation")
+#Calculate the relative intensity as a function of gradient
+par_res_fore <- parres(fit_all, "Forest")
+#Calculate the partial residuals as a function of HFI
+par_res_hfi <- parres(fit_all, "HFI")
+#Calculate the partial residuals as a function of elevation
+par_res_water <- parres(fit_all, "Dist_Water")
+#Side by side plotting
+par(mfrow = c(2,2))
+plot(par_res_elev,legend = FALSE,lwd = 2,main = "",xlab = "Elevation ")
+plot(par_res_fore,legend = FALSE,lwd = 2,main = "",xlab = "Forest")
+plot(par_res_hfi,legend = FALSE,lwd = 2,main = "",xlab = "HFI")
+plot(par_res_water,legend = FALSE,lwd = 2,main = "",xlab = "Dist_Water")
+```
+
+```{r}
+library(splines2)
+
+#Fit the PPP model
+fit_smooth <- ppm(vulpe_ppp ~ bs(Elevation,5) + bs(HFI, 5)+bs(Forest,4)+bs(Dist_Water,8), data = DATA, use.gam = TRUE)
+
+fit_smooth
+```
+```{r}
+diagnose.ppm(fit_smooth)
+```
+
+
+```{r}
+#Calculate the partial residuals as a function of elevation
+par_res_elev <- parres(fit_smooth, "Elevation")
+#Calculate the relative intensity as a function of gradient
+par_res_fore <- parres(fit_smooth, "Forest")
+#Calculate the partial residuals as a function of HFI
+par_res_hfi <- parres(fit_smooth, "HFI")
+#Calculate the partial residuals as a function of elevation
+par_res_water <- parres(fit_smooth, "Dist_Water")
+#Side by side plotting
+par(mfrow = c(2,2))
+plot(par_res_elev,legend = FALSE,lwd = 2,main = "",xlab = "Elevation ")
+plot(par_res_fore,legend = FALSE,lwd = 2,main = "",xlab = "Forest")
+plot(par_res_hfi,legend = FALSE,lwd = 2,main = "",xlab = "HFI")
+plot(par_res_water,legend = FALSE,lwd = 2,main = "",xlab = "Dist_Water")
+```
+
+```{r}
+AIC(fit_smooth);
+AIC(fit_null)
+```
+```{r}
+anova(fit_null,fit_smooth,test='LRT')
+```
+
+```{r}
+#Visualise the fitted model
+plot(fit_all,se = FALSE,superimpose = FALSE,main = "Estimated Vulpe intensity",n=100)
+##Overlay the park locations
+plot(vulpe_ppp, pch = 16,cex = 0.8,cols = "black",add = TRUE)
+
+```
+```{r}
+#Visualise the fitted model
+plot(fit_smooth,se = FALSE,superimpose = FALSE,main = "Estimated Vulpe intensity",n=100)
+##Overlay the park locations
+plot(vulpe_ppp, pch = 16,cex = 0.8,cols = "black",add = TRUE)
+
+```
+
