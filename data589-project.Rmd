@@ -25,6 +25,12 @@ load('C:/Users/siyue/Documents/Block 6/data589/BC_Covariates.RDa')
 load('C:/Users/siyue/Documents/Block 6/data589/species_bc.RData')
 ```
 
+
+#### Explore and inspect data
+
+First we need to convert the latitude and longitude coordinates in the dataset to BC Albers projection for the coherence of covariates information provided. `ppp`function in `spatstat`package was used to convert data to ppp(i.e., a planar point pattern) object. Since Visualization is always helpful to explore the data initially, we plotted all the covariates with the ppp object in the same image to show if it looks like existing some potential relationship between the vulpes vulpes' distribution and covariates. We also used `persp` function to draw perspective plots in 3 dimensions for more clear visualization. Finally we generated  kernel density estimate (KDE) of the distribution of four covariates using `density` function to explore more about vulpes vulpe's distribution and capture its trend.
+
+
 ```{r}
 coord <- df[,c('decimalLatitude','decimalLongitude')]
 coord <- na.omit(coord)
@@ -43,7 +49,7 @@ coord_conv
 vulpe_ppp <- ppp(x=coord_conv$decimalLatitude,y=coord_conv$decimalLongitude,window=as.owin(DATA$Window))
 attr(vulpe_ppp, "rejects")
 vulpe_ppp <- as.ppp(vulpe_ppp)
-plot(vulpe_ppp,main='Point Pattern of vulpes in BC ',col='darkgrey',cols='darkblue',pch=16,cex=0.9)
+plot(vulpe_ppp,main='Point Pattern of vulpes vulpes in BC ',col='darkgreen',cols='lightblue',pch=16,cex=0.9)
 ```
 ```{r}
 #plot elevation image
@@ -57,6 +63,20 @@ fig <- persp(DATA$Elevation, # source data
 
 perspPoints(vulpe_ppp, Z = DATA$Elevation, M = fig, pch = 16, cex = 0.7)
 ```
+```{r}
+#plot elevation image
+fig <- persp(DATA$Elevation, # source data
+             theta = 25, phi = 20, # rotation
+             expand = 30, # z-axis expansion
+             shade = 0.1, # shading
+             box = FALSE, # axes on/off
+             main = "Elevation Perspective Plot", # title
+             colmap = viridis(200) ) # colour pallet
+
+perspPoints(vulpe_ppp, Z = DATA$Elevation, M = fig, pch = 16, cex = 0.7)
+```
+
+
 Try to see if there are some relationship.
 ```{r}
 plot(DATA$Forest)
@@ -79,6 +99,44 @@ plot(vulpe_ppp,add=T,pch=16,cex=0.8)
 ```
 
 ```{r}
+par(mfrow=c(2,2))
+kde_bc1 <- density(as.numeric(DATA$Elevation))
+kde_vu1 <- density(as.numeric(DATA$Elevation[vulpe_ppp]))
+plot(kde_bc1,main='KDE_Elevation',col='red',ylim=c(0,10*10^(-4)))
+lines(kde_vu1,col='blue')
+legend("topright",c("All Area","Vulpe location"),col=c('red','blue'),bty='n',lty=2)
+
+kde_bc2 <- density(as.numeric(DATA$Forest))
+kde_vu2 <- density(as.numeric(DATA$Forest[vulpe_ppp]))
+plot(kde_bc2,main='KDE_Forest',col='red')
+lines(kde_vu2,col='blue')
+legend("topright",c("All Area","Vulpe location"),col=c('red','blue'),bty='n',lty=2)
+
+kde_bc3 <- density(as.numeric(DATA$HFI))
+kde_vu3 <- density(as.numeric(DATA$HFI[vulpe_ppp]))
+plot(kde_bc3,main='KDE_HFI',col='red')
+lines(kde_vu3,col='blue')
+legend("topright",c("All Area","Vulpe location"),col=c('red','blue'),bty='n',lty=2)
+
+kde_bc4 <- density(as.numeric(DATA$Dist_Water))
+kde_vu4 <- density(as.numeric(DATA$Dist_Water[vulpe_ppp]))
+plot(kde_bc4,main='KDE_Dist Water',col='red')
+lines(kde_vu4,col='blue')
+legend("topright",c("All Area","Vulpe location"),col=c('red','blue'),bty='n',lty=2)
+
+```
+
+### First moment descriptive statistics
+
+After some basic exploration about the data, the first summary statistics we want to calculate is the average number of points per unit area (i.e., our ‘expectation’, or ‘first moment’). In point pattern analysis, this quantity is called the ‘intensity’, denoted $\lambda$. For estimating the intensity, we first chose the simplest estimator of $\lambda$,the number of points in our window B divided by the area of B under an assumption of homogeneity. Then we used a quadrat test to determine whether the assumption of homogeneity is met. That is, under a null hypothesis that the intensity is homogeneous, it test for significant deviations from complete spatial randomness (CSR). Then with a tiny p-value as return, it suggested that there is a significant deviation from homogeneity. We also visualized both the quadrats and estimated intensity using `quadratcount` function to justify assumption of homogeneity was not appropriate for this dataset.
+
+Thus we can focus on inhomogeneous intensity. A spatially varying, λ(u)
+ can also be estimated non-parametrically by kernel estimation. Kernels estimate λ(u)
+ by placing kernels' on each datapoint (often bi-variate Gaussian) and optimising thebandwidth’ (i.e., the standard deviation of the kernel). In practice, there are many different bandwidth optimisers, kernel shapes, and bias corrections for estimating λ^(u)
+. Kernel estimation is a statistically efficient non-parametric estimation technique Aiming at identification of areas of elevated intensity (i.e., hotspots), We plot the hot spot as well as the kernel estimate for intensity.
+
+
+```{r}
 #the intensity of vulpes/km 2 in BC
 win_km <- rescale(as.owin(DATA$Window), 1000, "km")
 vulpe_ppp$n/area(win_km)
@@ -87,8 +145,8 @@ vulpe_ppp$n/area(win_km)
 ```{r}
 #Use a quadrat test to determine whether the assumption of homogeneity is met.
 Q <- quadratcount(vulpe_ppp,
-nx = 10,
-ny = 10)
+nx = 5,
+ny = 5)
 quadrat.test(Q)
 ```
 ```{r}
@@ -102,6 +160,35 @@ plot(Q, cex = 1.2, col = "red", add = T)
 plot(intensity(Q, image = T))
 plot(vulpe_ppp,add=T,cols='black',pch=16,cex=0.8)
 ```
+
+```{r}
+#Hotpot analysis
+# Estimate R
+R <- bw.ppl(vulpe_ppp)
+
+#Calculate test statistic
+LR <- scanLRTS(vulpe_ppp, r = R)
+
+#Plot the output 
+plot(LR)
+plot(Window(vulpe_ppp),
+border = "white",
+add = T)
+```
+```{r}
+#Estimate the intensity using kernel estimation.
+lambda_u_hat <- density(vulpe_ppp, sigma = bw.ppl)
+# Visualize the output
+plot(lambda_u_hat,
+main = "Kernel estimate of vulpes vulpes intensity")
+plot(vulpe_ppp,
+pch = 16,
+cex = 0.6,
+cols = "white",
+add = T)
+
+```
+
 $\rho$
 ```{r}
 #Estimate $\rho$ for the locations of vulpes as a function of elevation
@@ -218,7 +305,7 @@ anova(fit_all, fit_sel, test = "LRT")
 
 ```
 ```{r}
-quadrat.test(fit_all, nx = 10, ny = 10)
+quadrat.test(fit_all, nx = 5, ny = 5)
 
 ```
 ```{r}
