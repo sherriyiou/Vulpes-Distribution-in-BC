@@ -130,10 +130,8 @@ legend("topright",c("All Area","Vulpe location"),col=c('red','blue'),bty='n',lty
 
 After some basic exploration about the data, the first summary statistics we want to calculate is the average number of points per unit area (i.e., our ‘expectation’, or ‘first moment’). In point pattern analysis, this quantity is called the ‘intensity’, denoted $\lambda$. For estimating the intensity, we first chose the simplest estimator of $\lambda$,the number of points in our window B divided by the area of B under an assumption of homogeneity. Then we used a quadrat test to determine whether the assumption of homogeneity is met. That is, under a null hypothesis that the intensity is homogeneous, it test for significant deviations from complete spatial randomness (CSR). Then with a tiny p-value as return, it suggested that there is a significant deviation from homogeneity. We also visualized both the quadrats and estimated intensity using `quadratcount` function to justify assumption of homogeneity was not appropriate for this dataset.
 
-Thus we can focus on inhomogeneous intensity. A spatially varying, λ(u)
- can also be estimated non-parametrically by kernel estimation. Kernels estimate λ(u)
- by placing kernels' on each datapoint (often bi-variate Gaussian) and optimising thebandwidth’ (i.e., the standard deviation of the kernel). In practice, there are many different bandwidth optimisers, kernel shapes, and bias corrections for estimating λ^(u)
-. Kernel estimation is a statistically efficient non-parametric estimation technique Aiming at identification of areas of elevated intensity (i.e., hotspots), We plot the hot spot as well as the kernel estimate for intensity.
+Thus we can focus on inhomogeneous intensity. A spatially varying intensity
+can also be estimated non-parametrically by kernel estimation, which places kernels' on each datapoint (often bi-variate Gaussian) and optimizes the bandwidth.(Baddeley, A., Rubak, E. & Turner, R. (2015). Spatial point patterns: methodology and applications with R. CRC press) We plotted kernel estimated intensity for ppp object as well as the hot spot with the kernel estimate to identify areas of elevated intensity.
 
 
 ```{r}
