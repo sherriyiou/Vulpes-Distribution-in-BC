@@ -1,0 +1,477 @@
+---
+fontsize: 12pt
+output:
+  pdf_document:
+    #css: style.css
+    fig_caption: yes
+    highlight: pygments
+    keep_tex: yes
+    number_sections: yes
+    #toc: yes
+header-includes: 
+  - \usepackage{float}
+  - \usepackage{longtable}
+---
+
+```{=tex}
+\begin{center}
+\vspace*{2\baselineskip}
+\vspace*{2\baselineskip}
+\LARGE{\textbf{Spatial Analysis Based on Vulpes vulpes}}\\
+\vspace*{2\baselineskip}
+\normalsize{\textbf{Group Members}}\\
+Yuxin Chen\\
+Siyue Gao\\
+Xiaoxiao Fu\\
+\vspace*{1\baselineskip}
+\normalsize{\textbf{Date}}\\
+April 27, 2023\\
+\vspace*{2\baselineskip}
+\normalsize{\textbf{Dataset}}\\
+https://www.gbif.org/species/5219243
+\end{center}
+```
+```{=tex}
+\newpage
+\tableofcontents
+\newpage
+```
+```{r global_options, include=FALSE, cache=FALSE}
+## Set some options for knitr to apply globally
+knitr::opts_chunk$set(cache=TRUE,
+                      echo=FALSE,
+                      autodep=TRUE,
+                      message=FALSE,
+                      warning=FALSE,
+#                      dev='tikz',
+                      fig.align='center')
+```
+
+```{r}
+library(sf)
+library(sp)
+library(spatstat)
+library(maptools)
+library(rgdal)
+library(viridis)
+```
+
+```{r}
+load('G:/UBC/Block6/589Special/Project_Dataset/BC_Covariates.RDa')
+load('G:/UBC/Block6/589Special/Project_Dataset/species_bc.RData')
+```
+
+# Introduction
+
+Spatial statistical analysis is a powerful tool for understanding geographic space and studying geographic phenomena. It involves transforming geographic models into mathematical statistical models for quantitative description. Spatial statistical analysis has been applied in many fields, such as population, medicine, economics, and land change. By using spatial information analysis techniques, we can study spatial patterns and trends of geographic phenomena through observation and experimentation of the original data model. This allows us to gain new experience and knowledge and use it as a decision-making basis for spatial behavior. In this study, we will apply spatial statistical analysis techniques and construct a Poisson Process model to study the spatial distribution of Vulpes vulpes (Red Fox) in British Columbia, Canada, in order to explore the factors that influence its distribution.
+
+The Vulpes vulpes is one of the largest and most widely distributed members of the Canidae family, and its distribution covers much of the Northern Hemisphere, including most of Northern America, Europe, and Asia. As an omnivorous animal, the Vulpes vulpes plays a balancing role in the food chain in the natural world, and its food sources are diverse. Monitoring and managing the distribution of this species' populations can help monitor the balance and stability of the ecosystem, and as a widely distributed species, studying the distribution of Vulpes vulpes can also help scientists understand biodiversity and the operation of ecosystems.
+
+There have been a relatively large academic literature on spatial statistical analysis of the Vulpes vulpes. JJA Dekker et al.^1^ proposed spatial-statistical methods for the classification of free-ranging foxes in 2001, CD Soulsbury et al.^2^ used spatial statistics to analyze the movement of Vulpes vulpes away from their birthplace or home territory in 2011, and PA Fleming et al.^3^ studied the dietary composition of Vulpes vulpes in Australia in 2022.
+
+The data used for this study is obtained from the Global Biodiversity Information Network (GBIF). We selected distribution data of Vulpes vulpes in British Columbia, and cleaned the data by removing entries with missing longitude or latitude values, as well as empty variable columns, resulting in a dataset contained 177 entries with 130 variables, including the GBIF identifier, taxonomic information, occurrence date and precision, and identification reference for each species and so on. In this study, we only utilized the longitude and latitude data for our analysis.
+
+In this study, we also used the BC Environmental Variables dataset, which provides a set of environmental variables as covariates to describe the trends of observed point data. This dataset includes five covariates: Window (grid cells covering the entire province), Elevation (topographic height information), Forest (forest coverage), Dist_Water (distance to the nearest water source), and HFI (hazard factor index). These variables can help us understand the impact of altitude, forest distribution, water sources on the habitat and activity of the species, and can combine multiple environmental factors to predict species distribution.
+
+# Methods
+
+## Explore and inspect data
+
+First we need to convert the latitude and longitude coordinates in the dataset to BC Albers projection for the coherence of covariates information provided. `ppp`function in `spatstat`package was used to convert data to ppp(planar point pattern) object. Since Visualization is always helpful to explore the data initially, we plotted all the covariates with the ppp object in the same image to show if it looks like existing some potential relationship between the vulpes vulpes' distribution and covariates. We also used `persp` function to draw perspective plots in 3 dimensions for more clear visualization. Finally we generated kernel density estimate (KDE) of the distribution of four covariates using `density` function to explore more about vulpes vulpe's distribution and capture its trend.
+
+## First moment descriptive statistics
+
+After some basic exploration about the data, the first summary statistics we want to calculate is the average number of points per unit area ('expectation', or 'first moment'). In point pattern analysis, this quantity is called the 'intensity', denoted $\lambda$. For estimating the intensity, we first chose the simplest estimator of $\lambda$,the number of points in our window B divided by the area of B under an assumption of homogeneity. Then we used a quadrat test to determine whether the assumption of homogeneity is met. That is, under a null hypothesis that the intensity is homogeneous, it test for significant deviations from complete spatial randomness (CSR). Then with a tiny p-value as return, it suggested that there is a significant deviation from homogeneity. We also visualized both the quadrats and estimated intensity using `quadratcount` function to justify assumption of homogeneity was not appropriate for this dataset.
+
+Thus we can focus on inhomogeneous intensity. A spatially varying intensity can also be estimated non-parametrically by kernel estimation, which places kernels' on each datapoint (often bi-variate Gaussian) and optimizes the bandwidth^6^. We plotted kernel estimated intensity for ppp object as well as the hot spot with the kernel estimate to identify areas of elevated intensity.
+
+## Second moment descriptive statistics
+
+As we already knew that this is a non homogeneous point process, we now were interested in the relationships between points. Patterns existing in the intensity can be caused by external factors underpining the distribution of $\lambda(u)$ or relationships (correlation) between points. As for describing correlation, we started with Ripley's K function instead of Morisita's index due to the homogeneity assumption was broken. Ripley's K-function builds metric directly off of the separation distances between all ordered pairs of distinct points and thus describes the cumulative average number of points falling within distance r of a typical point. We corrected the inhomogeneity using `Kinhom` function and generated bootstrapped estimates using `envelope` function to obtain confidence intervals. Then we plot both empirical K-function and theoretical K-function with CI for identification of deviation.
+
+Then we used the derivative of the K-function with respect to r, the Pair correlation function, which only contains contributions from inter-point distances = r and provides some information on the behaviour of the process. We also corrected for inhomogeneity using `pcfinhom` function and `envelope` function to obtain confidence intervals for comparison.
+
+## Modelling
+
+-   Pre-analysis
+
+Since we know much of the correlations between points are due to relationships with covariates, we first need to determine what covairates the intensity depends on. We started to explore the underlying deterministic model form using `rhohat` function, a non-parametric estimate via kernel estimation. Then after getting first impression of the relationship between intensity and covariates, we decided to built log-like polynomial model of all four covariates.Then we checked for the collinearity before the model fitting with a number of potentially correlated variables.
+
+-   Model fitting
+
+First we centered and scaled all four covariates since those were on very different scales. Then we used `ppm` function to build a log-like cubic model of all four covariates. Looking at the Ztest value, we only kept the significant item and built another model using `ppm` function. Finally we used `bs` function in `splines` package to realize a GAM model for better fitting result. Then we viusalized them for better communication.
+
+-   Model selection/Validation
+
+We first applied AIC to three models we built as well as the intercept model(null model), then with the return result, we decided to focus on full model and spline model due to the after selection model did not varied much from full model in terms of AIC. Then we chose likelihood ratio tests using `anova` function to compare the model we build and the null model. Finally we visualized both the residual plot and partial residual plot for the two model to learn more about the models' capacity.
+
+```{r include=FALSE}
+coord <- df[,c('decimalLatitude','decimalLongitude')]
+coord <- na.omit(coord)
+```
+
+```{r include=FALSE}
+#Convert the coordinate
+coordinates(coord) <- ~ decimalLongitude+decimalLatitude
+proj4string(coord) <- CRS("+proj=longlat +datum=WGS84")
+coord_conv <- spTransform(coord, CRS("+proj=aea +lat_0=45 +lon_0=-126 +lat_1=50 +lat_2=58.5 +x_0=1000000 +y_0=0 +datum=NAD83 +units=m +no_defs"))
+coord_conv
+```
+
+```{r include=FALSE,fig.show="hide"}
+#plot ppp
+vulpe_ppp <- ppp(x=coord_conv$decimalLatitude,y=coord_conv$decimalLongitude,window=as.owin(DATA$Window))
+attr(vulpe_ppp, "rejects")
+vulpe_ppp <- as.ppp(vulpe_ppp)
+plot(vulpe_ppp,main='Point Pattern of vulpes vulpes in BC ',col='darkgreen',cols='lightblue',pch=16,cex=0.9)
+```
+
+```{r include=FALSE,fig.show="hide"}
+#plot elevation image
+fig <- persp(DATA$Elevation, # source data
+             theta = 25, phi = 20, # rotation
+             expand = 30, # z-axis expansion
+             shade = 0.1, # shading
+             box = FALSE, # axes on/off
+             main = "Elevation Perspective Plot", # title
+             colmap = viridis(200) ) # colour pallet
+
+perspPoints(vulpe_ppp, Z = DATA$Elevation, M = fig, pch = 16, cex = 0.7)
+```
+
+```{r include=FALSE,fig.show="hide"}
+#Try to see if there are some relationship.
+plot(DATA$Forest)
+plot(vulpe_ppp,add=T,pch=16,cex=0.8)
+```
+
+```{r include=FALSE,fig.show="hide"}
+plot(DATA$Elevation)
+plot(vulpe_ppp,add=T,pch=16,cex=0.8)
+```
+
+```{r include=FALSE,fig.show="hide"}
+plot(DATA$HFI)
+plot(vulpe_ppp,add=T,pch=16,cex=0.8)
+```
+
+```{r include=FALSE,fig.show="hide"}
+plot(DATA$Dist_Water)
+plot(vulpe_ppp,add=T,pch=16,cex=0.8)
+```
+
+```{r include=FALSE,fig.show="hide"}
+par(mfrow=c(2,2))
+kde_bc1 <- density(as.numeric(DATA$Elevation))
+kde_vu1 <- density(as.numeric(DATA$Elevation[vulpe_ppp]))
+plot(kde_bc1,main='KDE_Elevation',col='red',ylim=c(0,10*10^(-4)))
+lines(kde_vu1,col='blue')
+legend("topright",c("All Area","Vulpe location"),col=c('red','blue'),bty='n',lty=2)
+
+kde_bc2 <- density(as.numeric(DATA$Forest))
+kde_vu2 <- density(as.numeric(DATA$Forest[vulpe_ppp]))
+plot(kde_bc2,main='KDE_Forest',col='red')
+lines(kde_vu2,col='blue')
+legend("topright",c("All Area","Vulpe location"),col=c('red','blue'),bty='n',lty=2)
+
+kde_bc3 <- density(as.numeric(DATA$HFI))
+kde_vu3 <- density(as.numeric(DATA$HFI[vulpe_ppp]))
+plot(kde_bc3,main='KDE_HFI',col='red')
+lines(kde_vu3,col='blue')
+legend("topright",c("All Area","Vulpe location"),col=c('red','blue'),bty='n',lty=2)
+
+kde_bc4 <- density(as.numeric(DATA$Dist_Water))
+kde_vu4 <- density(as.numeric(DATA$Dist_Water[vulpe_ppp]))
+plot(kde_bc4,main='KDE_Dist Water',col='red')
+lines(kde_vu4,col='blue')
+legend("topright",c("All Area","Vulpe location"),col=c('red','blue'),bty='n',lty=2)
+
+```
+
+# Results
+
+## Descriptive Statistics
+
+-   Inhomogeneous Intensity
+
+Under the assumption of homogeneity, we first calculate the intensity of vulpes vulpes/km\^2 in BC, which was 0.000187/km\^2. However, the assumption has been denied by quadrat test with a tiny p value as a return. Also as shown in Figure 1, the assumption of homogeneity is not appropriate for this dataset clearly. The number and color in each quadrat deviated a lot. The middle-northwestern part in BC as well as southeastern part has more vulpes than other regions, especially the border of BC.
+
+```{r include=FALSE}
+#the intensity of vulpes/km 2 in BC
+win_km <- rescale(as.owin(DATA$Window), 1000, "km")
+vulpe_ppp$n/area(win_km)
+```
+
+```{r include=FALSE}
+#Use a quadrat test to determine whether the assumption of homogeneity is met.
+Q <- quadratcount(vulpe_ppp,
+nx = 5,
+ny = 5)
+quadrat.test(Q)
+```
+
+```{r,fig.cap='quadrat visualization', fig.width=10, fig.height=4, out.width="400px", out.height="200px",}
+#Visualise both the quadrats and estimated intensity
+par(mfrow=c(1,2))
+plot(vulpe_ppp,cols = "#046C9A",pch=16,main='quadrats test plot')
+plot(Q, cex = 1.2, col = "red", add = T)
+plot(intensity(Q, image = T),main='quadrat intensity')
+plot(vulpe_ppp,add=T,cols='black',pch=16,cex=0.8)
+```
+
+In Figure 2, the kernel estimation helps to show the intensity vividly all over the province. From this we can identify areas of elevated intensity such as the northwestern region of BC province.
+
+```{r fig.cap='kernel estimate visualization',fig.width=10, fig.height=4, out.width="400px", out.height="200px",}
+#Hotpot analysis
+# Estimate R
+R <- bw.ppl(vulpe_ppp)
+
+#Calculate test statistic
+LR <- scanLRTS(vulpe_ppp, r = R)
+
+#Estimate the intensity using kernel estimation.
+lambda_u_hat <- density(vulpe_ppp, sigma = bw.ppl)
+
+#Plot the output 
+par(mfrow=c(1,2))
+plot(LR,main='Hot spot Estimation ')
+plot(Window(vulpe_ppp),
+border = "white",
+add = T)
+
+# Visualize the output
+plot(lambda_u_hat,
+main = "Kernel Estimatation")
+plot(vulpe_ppp,
+pch = 16,
+cex = 0.6,
+cols = "white",
+add = T)
+```
+
+-   Independence
+
+Based on the fact the point process is inhomogeneous, we used Ripley's K function and Pair correlation function(g function) to explore its relationship between points. In Figure 3, after corrected for inhomogeneity, the estimated empirical K-function is within the confidence limits of the sample mean of K from simulations. This suggests that vulpes in BC are not correlated/clustered in space. As for g-function plot, it almost near by the line of one, which also suggested for no clustering and avoidance but independence.
+
+```{r include=FALSE}
+#Using Ripley’s K-function, test for a significant (i.e., $\alpha$ = 0.05) correlation between vulpe locations.
+#corrected for inhomogeneity
+lambda_vulpe_pos <- density(vulpe_ppp,
+sigma=bw.ppl,
+positive=TRUE)
+
+E_vulpe_inhom <- envelope(vulpe_ppp,
+Kinhom,
+simulate = expression(rpoispp(lambda_vulpe_pos)),
+correction="border",
+rank = 1,
+nsim = 19,
+fix.n = TRUE)
+par(mfrow=c(2,2))
+plot(E_vulpe_inhom,main = "",lwd = 2)
+pcf_vulpe_inhom <- envelope(vulpe_ppp,
+pcfinhom,
+simulate = expression(rpoispp(lambda_vulpe_pos)),
+rank = 1,
+nsim = 19)
+plot(pcf_vulpe_inhom)
+```
+
+## Model
+
+-   Covariates Analysis
+
+Exploring at four covariates influence on intensity, we can find that the intensity of vulpes vulpes in BC is related to elevation, forest cover, HFI and distance to water, and all the relationship seem to be polynomial. For instance, vulpes vulpes seem to like living in low cover forest area and where is comparatively far to water.
+
+```{r,fig.cap='covariates-intensity plot',fig.width=10, fig.height=8, out.width="400px", out.height="350px",}
+#Estimate $\rho$ for the locations of vulpes as a function of elevation
+#rho_e <- rhohat(vulpe_ppp, DATA$Elevation)
+#save(rho_e,file='rho_e.Rda')
+load('rho_e.Rda')
+#Estimate $\rho$ for the locations of vulpes as a function of forest
+#rho_f <- rhohat(vulpe_ppp, DATA$Forest)
+#save(rho_f,file='rho_f.Rda')
+load('rho_f.Rda')
+#Estimate $\rho$ for the locations of vulpes as a function of HFI
+#rho_h <- rhohat(vulpe_ppp, DATA$HFI)
+#save(rho_h,file='rho_h.Rda')
+load('rho_h.Rda')
+#Estimate $\rho$ for the locations of vulpes as a function of Dist_Water
+#rho_w <- rhohat(vulpe_ppp, DATA$Dist_Water)
+#save(rho_w,file='rho_w.Rda')
+load('rho_w.Rda')
+# Plot $\rho$ vs. elevation
+par(mfrow=c(2,2))
+plot(rho_e,xlim=c(0,3500),main='Elevation')
+# Plot $\rho$ vs. forest
+plot(rho_f,main='Forest')
+# Plot $\rho$ vs. HFI
+plot(rho_h,main='HFI')
+# Plot $\rho$ vs. Dist_Water
+plot(rho_w,main='Dist_Water')
+```
+
+```{r include=FALSE}
+#collinearity
+cor.im(DATA$Elevation,DATA$Forest, use = "complete.obs");
+cor.im(DATA$Elevation,DATA$Dist_Water, use = "complete.obs");
+cor.im(DATA$Forest,DATA$HFI, use = "complete.obs");
+cor.im(DATA$Elevation,DATA$HFI, use = "complete.obs");
+cor.im(DATA$Forest,DATA$Dist_Water, use = "complete.obs");
+cor.im(DATA$HFI,DATA$Dist_Water, use = "complete.obs")
+```
+
+```{r include=FALSE}
+#The predictors are on very different scales
+mu <- mean(DATA$Elevation)
+stdev <- sd(DATA$Elevation)
+DATA$Elevation <- eval.im((Elevation - mu)/stdev, DATA)
+mu <- mean(DATA$Dist_Water)
+stdev <- sd(DATA$Dist_Water)
+DATA$Dist_Water <- eval.im((Dist_Water - mu)/stdev, DATA)
+mu <- mean(DATA$Forest)
+stdev <- sd(DATA$Forest)
+DATA$Forest <- eval.im((Forest - mu)/stdev, DATA)
+mu <- mean(DATA$HFI)
+stdev <- sd(DATA$HFI)
+DATA$HFI <- eval.im((HFI - mu)/stdev, DATA)
+```
+
+## Model fitting
+
+As discussed in Methods, we focused on two models in this report. One used cubic form of four covariates. The model formula we obtained is
+
+![](images/1682923906443.png)
+
+Notice that here we have already centered and scaled all four covariates for calculation in R. Another model is based on GAM, and we set the degree of freedom for Elevation, Forest, HFI,Dist_Water to 11 from the observation of rho plot. We also visualized these two models. From Figure 4 we can see for first model, it captures the overall trends well except it overestimates the north part intensity. While in second model, the model seems to be overfitting a little bit as it is not very good at showing all trends in the province.
+
+```{r include=FALSE}
+#Since the relationship in rho are not apparently quadratic but polynomial
+fit_all <- ppm(vulpe_ppp~polynom(Elevation,3)+polynom(Forest,3)+HFI +I(HFI^2)+I(HFI^3)+polynom(Dist_Water,3),data=DATA)
+fit_all
+```
+
+```{r include=FALSE}
+fit_sel <- ppm(vulpe_ppp~+polynom(Forest,3)+HFI+I(HFI^2)+polynom(Dist_Water,3),data=DATA)
+fit_sel
+```
+
+```{r include=FALSE}
+fit_null <- ppm(vulpe_ppp~1,data=DATA)
+fit_null
+```
+
+```{r include=FALSE}
+library(splines)
+
+#Fit the PPP model
+fit_smooth <- ppm(vulpe_ppp ~ bs(Elevation,11) + bs(HFI, 11)+bs(Forest,11)+bs(Dist_Water,11), data = DATA, use.gam = TRUE)
+
+fit_smooth
+```
+
+```{r,fig.cap='Esitimated Intensity',fig.width=10, fig.height=4, out.width="400px", out.height="200px",}
+#Visualise the fitted model
+library("splines")
+par(mfrow=c(1,2))
+plot(fit_all,se = FALSE,superimpose = FALSE,main = "Estimated Vulpe intensity",n=300)
+##Overlay the park locations
+plot(vulpe_ppp, pch = 16,cex = 0.8,cols = "black",add = TRUE)
+
+#Visualise the fitted model
+plot(fit_smooth,se = FALSE,superimpose = FALSE,main = "Estimated Vulpe intensity in spline",n=75)
+##Overlay the park locations
+plot(vulpe_ppp, pch = 16,cex = 0.8,cols = "black",add = TRUE)
+
+```
+
+## Model Elevation
+
+Both models are significant better fit than null model. As for AIC value, while the null model is 8286.2, the first model is 8257.7 with $\delta$AIC 28.5, and the second model is 8216.6 with $\delta$AIC 69.6.
+
+```{r include=FALSE}
+AIC(fit_all);
+AIC(fit_sel);
+AIC(fit_smooth);
+AIC(fit_null)
+```
+
+```{r include=FALSE}
+anova(fit_null, fit_all,test = "LRT")
+anova(fit_null,fit_smooth,test='LRT')
+```
+
+```{r,fig.cap='Residual Plot',fig.width=10, fig.height=6, out.width="400px", out.height="200px",}
+#Visualise the residuals
+library(splines)
+par(mfrow=c(1,2))
+invisible(diagnose.ppm(fit_all))
+invisible(diagnose.ppm(fit_smooth))
+```
+
+In Figure 5, we plotted the residual for both model, and it clearly that the residual is less in the second model(the color is lighter). Both model has average-enough residuals value in the whole province.
+
+```{r,fig.cap='Part Residual Plot',fig.width=10, fig.height=6, out.width="400px", out.height="250px",}
+#Calculate the partial residuals as a function of elevation
+par_res_elev <- parres(fit_all, "Elevation")
+#Calculate the relative intensity as a function of gradient
+par_res_fore <- parres(fit_all, "Forest")
+#Calculate the partial residuals as a function of HFI
+par_res_hfi <- parres(fit_all, "HFI")
+#Calculate the partial residuals as a function of elevation
+par_res_water <- parres(fit_all, "Dist_Water")
+#Side by side plotting
+par(mfrow = c(2,2))
+plot(par_res_elev,legend = FALSE,lwd = 2,main = "",xlab = "Elevation ")
+plot(par_res_fore,legend = FALSE,lwd = 2,main = "",xlab = "Forest")
+plot(par_res_hfi,legend = FALSE,lwd = 2,main = "",xlab = "HFI")
+plot(par_res_water,legend = FALSE,lwd = 2,main = "",xlab = "Dist_Water")
+```
+
+For the part residual in first model, we can see that it did not capture some obvious trend in terms of elevation, HFI and Dist_Water in Figure 6. In Figure 7, While in the second model, it look like a much better fit due to we have added a lot of complexity. Still there are some improvement space.
+
+```{r,fig.cap='Part Residual Plot for Spline Model',fig.width=10, fig.height=6, out.width="400px", out.height="250px",}
+library("splines")
+#Calculate the partial residuals as a function of elevation
+par_res_elev <- parres(fit_smooth, "Elevation")
+#Calculate the relative intensity as a function of gradient
+par_res_fore <- parres(fit_smooth, "Forest")
+#Calculate the partial residuals as a function of HFI
+par_res_hfi <- parres(fit_smooth, "HFI")
+#Calculate the partial residuals as a function of elevation
+par_res_water <- parres(fit_smooth, "Dist_Water")
+#Side by side plotting
+par(mfrow = c(2,2))
+plot(par_res_elev,legend = FALSE,lwd = 2,main = "",xlab = "Elevation ")
+plot(par_res_fore,legend = FALSE,lwd = 2,main = "",xlab = "Forest")
+plot(par_res_hfi,legend = FALSE,lwd = 2,main = "",xlab = "HFI",ylim=c(-4,2))
+plot(par_res_water,legend = FALSE,lwd = 2,main = "",xlab = "Dist_Water",ylim=c(-4,6))
+```
+
+# Discussion
+
+Generally speaking, in terms of research about distribution of vulpes vulpes in BC province, we took a series of step to study on it. First, The spatial distribution of vulpes vulpes is inhomogeneous in BC province. That is, the intensity is not a constant but in relationship with other covariates or in points themselves. The middle-northwestern and southeastern region has higher intensity than other areas in BC. Second, it was found out that there is no clustering or avoidance but independence between points in terms of vulpes vulpes distribtuion in BC. This would suggest the much of the correlations between points are due to relationships with covariates, rather than relationships between the points. Furthermore, the above findings led us to find out the relationship between the intensity and covariates. For the four covariates we had in hand(Elevation, Forest, HFI and Dist_Water), they were all in polynomial relationship with covariates. Thus we built a model which formula is
+
+![](images/1682923906443-01.png).
+
+For improving fitting, we build another GAM model which set all degree of freedom to 11 for the complicated relationship. from models we built and some visualization tools, we are aware of that the intensity of vulpes vulpes is higher at lower elevation, lower forest cover, lower HFI value and closer distance to water.
+
+Though those two models performed well, there still are some improvement space. For instance, the first model can not capture some particular patterns well like high elevation or high HFI value, which the second model exists some overfitting issue when looking at the who pattern of model estimation in BC.
+
+For future potential improvement of model, more accurate coefficient-choosing tool and set of degree of freedom can be expected. For the implement of the current research, it can be applied in creating habitats for vulpes vulpes and study about its living habit.
+
+\newpage
+
+# Reference
+
+[1] Dekker, J. J. A., Chardonnet, P., & Verboom, J. (2001). Spatial‐statistical methods for the classification of free‐ranging foxes. Journal of Applied Ecology, 38(5), 1006-1021. doi: 10.1046/j.1365-2664.2001.00642.x
+
+[2] Bowyer, R. T., & Kitchen, A. M. (2011). Demography of a harvested swift fox population. Journal of Mammalogy, 92(1), 190-197. doi: 10.1644/10-MAMM-A-119.1
+
+[3] Schipper, J., Newsome, T. M., Beyer, H. L., & Dickman, C. R. (2021). Diet of the introduced red fox Vulpes vulpes in Australia: analysis of temporal and spatial patterns. Australian Journal of Zoology, 69(1), 1-13. <https://doi.org/10.1071/ZO20048>
+
+[4] Baddeley, A., Rubak, E. & Turner, R. (2015). Spatial point patterns: methodology and applications with R. CRC press.
+
+[5] Khanmohammadi, M., Waagepetersen, R., Nava, N., Nyengaard, J.R. and Sporring, J. (2014) Analysing the distribution of synaptic vesicles using a spatial point process model. 5th ACM Conference on Bioinformatics, Computational Biology and Health Informatics, Newport Beach, CA, USA, September 2014.
+
+[6]Baddeley, A., Rubak, E. & Turner, R. (2015). Spatial point patterns: methodology and applications with R. CRC press.
